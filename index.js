@@ -1,51 +1,48 @@
-import { version } from "./package.json"
-import { pluginOptionsHandler } from "./functions/pluginOptionsHandler.js"
-import { plugin } from "./functions/plugin.js"
-import variables from "./functions/variables.js"
-import themesObject from "./theme/object.js"
-import { base, components, utilities } from "./imports.js"
+import { plugin } from "../functions/plugin.js"
+import allThemes from "./object.js"
 
-export default plugin.withOptions(
-  (options) => {
-    return ({ addBase, addComponents, addUtilities }) => {
-      const {
-        include,
-        exclude,
-        prefix = "",
-      } = pluginOptionsHandler(options, addBase, themesObject, version)
+export default plugin.withOptions((options = {}) => {
+  return ({ addBase }) => {
+    const {
+      name = "custom-theme",
+      default: isDefault = false,
+      prefersdark = false,
+      "color-scheme": colorScheme = "normal",
+      root = ":root",
+      ...customThemeTokens
+    } = options
 
-      const shouldIncludeItem = (name) => {
-        if (include && exclude) {
-          return include.includes(name) && !exclude.includes(name)
-        }
-        if (include) {
-          return include.includes(name)
-        }
-        if (exclude) {
-          return !exclude.includes(name)
-        }
-        return true
+    let selector = `${root}:has(input.theme-controller[value=${name}]:checked),[data-theme="${name}"]`
+    if (isDefault) {
+      selector = `:where(${root}),${selector}`
+    }
+
+    // Merge custom theme with built-in theme if it exists
+    let themeTokens = { ...customThemeTokens }
+    if (allThemes[name]) {
+      const builtinTheme = allThemes[name]
+      themeTokens = {
+        ...builtinTheme,
+        ...customThemeTokens,
+        "color-scheme": colorScheme || builtinTheme.colorScheme,
       }
+    }
 
-      Object.entries(base).forEach(([name, item]) => {
-        if (!shouldIncludeItem(name)) return
-        item({ addBase, prefix })
-      })
+    const baseStyles = {
+      [selector]: {
+        "color-scheme": themeTokens["color-scheme"] || colorScheme,
+        ...themeTokens,
+      },
+    }
 
-      Object.entries(components).forEach(([name, item]) => {
-        if (!shouldIncludeItem(name)) return
-        item({ addComponents, prefix })
-      })
-
-      Object.entries(utilities).forEach(([name, item]) => {
-        if (!shouldIncludeItem(name)) return
-        item({ addUtilities, prefix })
+    if (prefersdark) {
+      addBase({
+        "@media (prefers-color-scheme: dark)": {
+          [root]: baseStyles[selector], // Use the configurable root option here
+        },
       })
     }
-  },
-  () => ({
-    theme: {
-      extend: variables,
-    },
-  }),
-)
+
+    addBase(baseStyles)
+  }
+})
